@@ -8,9 +8,9 @@ import pandas as pd
 
 # Import custom modules/classes
 #from dataloader.preprocess import SequentialPreprocessor, VarStabilizer, Smoother, BaselineCorrecter, Trimmer, Binner, Normalizer
-from Código.dataloader.SpectrumObject import SpectrumObject
+from dataloader.SpectrumObject import SpectrumObject
 import pymzml
-from data_augementator import DataAugmenter
+# from data_augementator import DataAugmenter
 
 # Global constants and configuration:
 CLASSES = ['RT023', 'RT027', 'RT078', 'RT106', 'RT165', 'RT181']
@@ -71,7 +71,10 @@ for medio in medios:
 label_mapping = {label: idx for idx, label in enumerate(CLASSES)}
 Y_train = np.array([label_mapping[label] for label in Y_train])
 
-
-
 # Preprocesado: llamamos a la función preprocesado para realizar un data augmentation
+# TODO
+
+# Cargamos el training data
+
+
 
