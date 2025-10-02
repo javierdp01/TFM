@@ -10,7 +10,7 @@ import pandas as pd
 #from dataloader.preprocess import SequentialPreprocessor, VarStabilizer, Smoother, BaselineCorrecter, Trimmer, Binner, Normalizer
 from dataloader.SpectrumObject import SpectrumObject
 import pymzml
-# from data_augementator import DataAugmenter
+from data_augementator import dataAugemnt
 
 # Global constants and configuration:
 CLASSES = ['RT023', 'RT027', 'RT078', 'RT106', 'RT165', 'RT181']
