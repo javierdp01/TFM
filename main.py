@@ -78,14 +78,14 @@ seed = 0 # reprodicibilidad
 
 dataAugment = DataAugmentor(seed=seed)
 preaugment = len(baseline_samples)
-print(f"Comprobación previa al aumento:  {len(baseline_samples)}")
+# print(f"Comprobación previa al aumento:  {len(baseline_samples)}")
 
 aug_samples, aug_ids, aug_labels = dataAugment.augment_dataset(
     spectra=baseline_samples,
     ids=baseline_id_label,
     labels=Y_train,
     k_per_spectrum=k_per_spectrum,
-    id_suffix="_aug"
+    id_suffix="aug"
 )
 
 # Concatenamos todo
@@ -93,10 +93,18 @@ all_samples = baseline_samples + aug_samples
 all_ids = baseline_id_label + (aug_ids if aug_ids is not None else [])
 all_labels = np.concatenate([Y_train, aug_labels]) if aug_labels is not None else Y_train
 
+if (preaugment != len(baseline_samples)):
+    print("Error al aumentar los datos.")
+    exit()
+else:
+    print("Data augment realizado correctamente...")
+
 print(f"Augmented + base = {len(all_samples)} spectra "
       f"(base {len(baseline_samples)} + aug {len(aug_samples)}).")
 
 
 # Cargamos el training data
-print("Code exit successfully with error 0")
 
+
+
+print("Code exit successfully with 0 errors...")

@@ -152,8 +152,6 @@ class DataAugmentor:
         return spec
 
     def augment_many(self, spectra: Iterable, k_per_spectrum: int = 1) -> List:
-a con todas las variantes.
-        """
         # Generamo un nº de variantes igual a k_per_spectrum por cada espectro de entrada y devolvemos al final una lista con todas las variantes
         out = []
         for spec in spectra:
@@ -171,9 +169,9 @@ a con todas las variantes.
         ids: Optional[List[str]] = None,
         labels: Optional[np.ndarray] = None,
         k_per_spectrum: int = 1,
-        id_suffix: str = "_aug"
+        id_suffix: str = "aug"
     ):
-
+        # Aumenta la colección
         aug_specs = self.augment_many(spectra, k_per_spectrum=k_per_spectrum)
 
         aug_ids = None
