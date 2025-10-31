@@ -24,4 +24,5 @@ Trabajo Fin de Máster
     * aug_specs: son los nuevos datos generados con las operaciones
     * aug_id: son los ids correspondientes a los nuevos datos
     * aug_labels: son las etiquetas correspondientes a los nuevos datos
-  Como estos datos no incluyen los obtenidos en la medición, se deberan concatenar los antiguos resultados con los nuevos para así completar el data augmentatino
+  
+   Como estos datos no incluyen los obtenidos en la medición, se deberan concatenar los antiguos resultados con los nuevos para así completar el data augmentatino
