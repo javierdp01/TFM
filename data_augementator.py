@@ -123,7 +123,7 @@ class DataAugmentor:
         self.rng = np.random.default_rng(seed)
         self.clip_nonneg = clip_nonneg
 
-    def augment_one(self, spec):
+    def augment_individual(self, spec):
         # Obtenemos los datos utilizando el getter
         x, y = get_xy(spec)
         x_aug = x.copy()
@@ -151,7 +151,7 @@ class DataAugmentor:
         set_xy(spec, x_aug, y_aug)
         return spec
 
-    def augment_many(self, spectra: Iterable, k_per_spectrum: int = 1) -> List:
+    def augment_variantes(self, spectra: Iterable, k_per_spectrum: int = 1) -> List:
         # Generamo un nº de variantes igual a k_per_spectrum por cada espectro de entrada y devolvemos al final una lista con todas las variantes
         out = []
         for spec in spectra:
@@ -159,7 +159,7 @@ class DataAugmentor:
                 x, y = get_xy(spec)
                 spec_copy = type(spec)() if hasattr(type(spec), "__call__") else spec
                 spec_copy = type(spec)(mz=x.copy(), intensity=y.copy())
-                out.append(self.augment_one(spec_copy))
+                out.append(self.augment_individual(spec_copy))
 
         return out
 
@@ -172,7 +172,7 @@ class DataAugmentor:
         id_suffix: str = "aug"
     ):
         # Aumenta la colección
-        aug_specs = self.augment_many(spectra, k_per_spectrum=k_per_spectrum)
+        aug_specs = self.augment_variantes(spectra, k_per_spectrum=k_per_spectrum)
 
         aug_ids = None
         if ids is not None:
