@@ -5,12 +5,13 @@ from glob import glob
 from tqdm import tqdm
 from sklearn.ensemble import RandomForestClassifier
 import pandas as pd
+import torch
 
 # Import custom modules/classes
 #from dataloader.preprocess import SequentialPreprocessor, VarStabilizer, Smoother, BaselineCorrecter, Trimmer, Binner, Normalizer
 from dataloader.SpectrumObject import SpectrumObject
 import pymzml
-from data_augementator import dataAugemnt
+from data_augementator import DataAugmentor
 
 # Global constants and configuration:
 CLASSES = ['RT023', 'RT027', 'RT078', 'RT106', 'RT165', 'RT181']
@@ -72,9 +73,30 @@ label_mapping = {label: idx for idx, label in enumerate(CLASSES)}
 Y_train = np.array([label_mapping[label] for label in Y_train])
 
 # Preprocesado: llamamos a la función preprocesado para realizar un data augmentation
-# TODO
+k_per_spectrum = 3 # nº de variables por espectro
+seed = 0 # reprodicibilidad
+
+dataAugment = DataAugmentor(seed=seed)
+preaugment = len(baseline_samples)
+print(f"Comprobación previa al aumento:  {len(baseline_samples)}")
+
+aug_samples, aug_ids, aug_labels = dataAugment.augment_dataset(
+    spectra=baseline_samples,
+    ids=baseline_id_label,
+    labels=Y_train,
+    k_per_spectrum=k_per_spectrum,
+    id_suffix="_aug"
+)
+
+# Concatenamos todo
+all_samples = baseline_samples + aug_samples
+all_ids = baseline_id_label + (aug_ids if aug_ids is not None else [])
+all_labels = np.concatenate([Y_train, aug_labels]) if aug_labels is not None else Y_train
+
+print(f"Augmented + base = {len(all_samples)} spectra "
+      f"(base {len(baseline_samples)} + aug {len(aug_samples)}).")
+
 
 # Cargamos el training data
-
-
+print("Code exit successfully with error 0")
 
