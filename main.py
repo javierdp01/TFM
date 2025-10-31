@@ -99,12 +99,4 @@ if (preaugment != len(baseline_samples)):
 else:
     print("Data augment realizado correctamente...")
 
-print(f"Augmented + base = {len(all_samples)} spectra "
-      f"(base {len(baseline_samples)} + aug {len(aug_samples)}).")
-
-
-# Cargamos el training data
-
-
-
 print("Code exit successfully with 0 errors...")
