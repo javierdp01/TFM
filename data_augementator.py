@@ -3,6 +3,7 @@
 # --------------------------------------------------------------------------------------    
 
 import numpy as np
+import random
 from dataloader.SpectrumObject import SpectrumObject
 
 from dataclasses import dataclass
@@ -13,9 +14,17 @@ from scipy.signal import fftconvolve
 # GETTERS Y SETTERS
 # ----------------------------------------
 def get_xy(spec) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Función utilizada para obtener los valores mz y intesity del spectrum object
+    """
+
     return spec.mz, spec.intensity
 
 def set_xy(spec, x: np.ndarray, y: np.ndarray):
+    """
+    Función utilizada para guardar los valores mz y intesity del spectrum object
+    """
+     
     spec.mz = x
     spec.intensity = y
     return spec
@@ -24,6 +33,10 @@ def set_xy(spec, x: np.ndarray, y: np.ndarray):
 # OPERACIONES PARA REALIZAR EL AUMENTO 
 # ----------------------------------------
 def intensity_scale(y, scale_range=(0.85, 1.15), p=0.7, rng=None):
+    """
+    Operación para simular variaciones de intensidad debido a fluctuaciones, a la sensibilidad del detector e incluso en la ganancia del instrumento
+    """
+
     if rng.random() > p: 
         return y
     
@@ -32,6 +45,10 @@ def intensity_scale(y, scale_range=(0.85, 1.15), p=0.7, rng=None):
     return result
 
 def mz_shift(x, y, ppm_range=(-10, 10), p=0.5, rng=None):
+    """
+    Operación para simular un desplazamiento en el eje x debido a errores de calibración
+    """
+
     if rng.random() > p: 
         return x, y
     
@@ -43,6 +60,10 @@ def mz_shift(x, y, ppm_range=(-10, 10), p=0.5, rng=None):
     return x, y_interp
 
 def gaussian_noise(y, snr_db_range=(20, 40), p=0.7, rng=None):
+    """
+    Operación para simular ruido blanco en el espectro debido al ruido eléctrico
+    """
+
     if rng.random() > p: 
         return y
     
@@ -52,20 +73,17 @@ def gaussian_noise(y, snr_db_range=(20, 40), p=0.7, rng=None):
     noise = rng.normal(0.0, np.sqrt(noise_power), size=y.shape)
     result = y + noise
 
-    return result
-
-def baseline_poly(x, y, order=2, amp_frac_range=(-0.03, 0.03), p=0.4, rng=None):
-    if rng.random() > p: 
-        return y
-    
-    xc = (x - x.mean()) / (x.std() + 1e-12)
-    coefs = rng.uniform(amp_frac_range[0], amp_frac_range[1], size=order+1)
-    base = sum(coefs[i] * xc**i for i in range(order+1))
-    result = y + base * (np.max(np.abs(y)) + 1e-12)
+    for i in range(len(result)):
+        if result[i] < 0:
+            result[i] = 0
 
     return result
 
 def peak_broadening(y, fwhm_pts_range=(1, 4), p=0.5, rng=None):
+    """
+    Operación para simular una convolución gaussiana para ensanchar los picos debido a diferencias en resolución instrumental
+    """
+
     if rng.random() > p: 
         return y
     
@@ -83,6 +101,10 @@ def peak_broadening(y, fwhm_pts_range=(1, 4), p=0.5, rng=None):
     return fftconvolve(y, g, mode="same")
 
 def random_dropout(y, frac_range=(0.0, 0.01), p=0.25, rng=None):
+    """
+    Operación para simular ciertos picos a 0 debido a pérdidas de información de la señal
+    """
+
     if rng.random() > p: 
         return y
     
@@ -99,6 +121,10 @@ def random_dropout(y, frac_range=(0.0, 0.01), p=0.25, rng=None):
     return y2
 
 def spikes(y, n_spikes_range=(0, 2), amp_frac_range=(0.1, 0.6), p=0.25, rng=None):
+    """
+    Operación para simular más picos a la señal debido a descaregas, interferencias o contaminación por los instrumentos
+    """
+
     if rng.random() > p: 
         return y
     
@@ -116,42 +142,100 @@ def spikes(y, n_spikes_range=(0, 2), amp_frac_range=(0.1, 0.6), p=0.25, rng=None
 # CLASE QUE REALIZA EL AUMENTO
 # ----------------------------------------
 class DataAugmentor:
-
+    selection = 0
     # Aumentador de los espectros de los datos iniciales
 
     def __init__(self, seed: Optional[int] = None, clip_nonneg: bool = True):
         self.rng = np.random.default_rng(seed)
         self.clip_nonneg = clip_nonneg
 
-    def augment_individual(self, spec):
+    def augment_individual(self, spec, type_augment):
+        """
+        Función para aumentar un 
+        """
+        
         # Obtenemos los datos utilizando el getter
         x, y = get_xy(spec)
         x_aug = x.copy()
         y_aug = y.astype(float).copy()
+        selection = 0
+        operation_label = []
+        y_before = y_aug.copy()
 
-        # Realizamos las distintas operaciones creadas para el data augmenter
-        y_aug = intensity_scale(y_aug, rng=self.rng)
+        if (type_augment == "random"):
+            possible_operations = [1, 2, 3, 4, 5, 6]
+            selection = random.choice(possible_operations)
+            # print(selection)
 
-        x_aug, y_aug = mz_shift(x_aug, y_aug, rng=self.rng)
-
-        y_aug = baseline_poly(x_aug, y_aug, rng=self.rng)
-
-        y_aug = peak_broadening(y_aug, rng=self.rng)
-
-        y_aug = gaussian_noise(y_aug, rng=self.rng)
-
-        y_aug = random_dropout(y_aug, rng=self.rng)
-
-        y_aug = spikes(y_aug, rng=self.rng)
+            if selection == 1:
+                y_aug = intensity_scale(y_aug, rng=self.rng)
+                if not np.array_equal(y_before, y_aug):
+                    operation_label.append("scale")
+            elif selection == 2:
+                x_aug, y_aug = mz_shift(x_aug, y_aug, rng=self.rng)
+                if not np.array_equal(y_before, y_aug):
+                    operation_label.append("mz_shift")
+            elif selection == 3:
+                y_aug = peak_broadening(y_aug, rng=self.rng)
+                if not np.array_equal(y_before, y_aug):
+                    operation_label.append("peak")
+            elif selection == 4:
+                y_aug = gaussian_noise(y_aug, rng=self.rng)
+                if not np.array_equal(y_before, y_aug):
+                    operation_label.append("noise")
+            elif selection == 5:
+                y_aug = random_dropout(y_aug, rng=self.rng)
+                if not np.array_equal(y_before, y_aug):
+                    operation_label.append("drop")
+            elif selection == 6:
+                y_aug = spikes(y_aug, rng=self.rng)
+                if not np.array_equal(y_before, y_aug):
+                    operation_label.append("spikes")
+            else:
+                print("Error while doing the random data augmentation in AUGMENT_INDIVIDUAL...")
+                exit
+        elif (type_augment == "linear"):
+            selection += 1
+            if selection <= 6:
+                y_aug = intensity_scale(y_aug, rng=self.rng)
+                if not np.array_equal(y_before, y_aug):
+                    operation_label.append("scale")
+            elif selection <= 12:
+                x_aug, y_aug = mz_shift(x_aug, y_aug, rng=self.rng)
+                if not np.array_equal(y_before, y_aug):
+                    operation_label.append("mz_shift")
+            elif selection <= 18:
+                y_aug = peak_broadening(y_aug, rng=self.rng)
+                if not np.array_equal(y_before, y_aug):
+                    operation_label.append("peak")
+            elif selection <= 24:
+                y_aug = gaussian_noise(y_aug, rng=self.rng)
+                if not np.array_equal(y_before, y_aug):
+                    operation_label.append("noise")
+            elif selection <= 30:
+                y_aug = random_dropout(y_aug, rng=self.rng)
+                if not np.array_equal(y_before, y_aug):
+                    operation_label.append("drop")
+            elif selection <= 36:
+                y_aug = spikes(y_aug, rng=self.rng)
+                if not np.array_equal(y_before, y_aug):
+                    operation_label.append("spikes")
+            else:
+                print("Error while doing the linear data augmentation in AUGMENT_INDIVIDUAL...")
+                exit
+        else:
+            print("Error: Has ingresado un valor incorrecto...")
+            exit
 
         if self.clip_nonneg:
             y_aug = np.maximum(y_aug, 0.0)
 
         # Los datos obtenidos se guardan utilizando el setter
         set_xy(spec, x_aug, y_aug)
+        spec.aug_ops = operation_label if operation_label else ["none"]
         return spec
 
-    def augment_variantes(self, spectra: Iterable, k_per_spectrum: int = 1) -> List:
+    def augment_variantes(self, spectra: Iterable, k_per_spectrum: int = 1, type_augment="random") -> List:
         # Generamo un nº de variantes igual a k_per_spectrum por cada espectro de entrada y devolvemos al final una lista con todas las variantes
         out = []
         for spec in spectra:
@@ -159,7 +243,7 @@ class DataAugmentor:
                 x, y = get_xy(spec)
                 spec_copy = type(spec)() if hasattr(type(spec), "__call__") else spec
                 spec_copy = type(spec)(mz=x.copy(), intensity=y.copy())
-                out.append(self.augment_individual(spec_copy))
+                out.append(self.augment_individual(spec_copy, type_augment))
 
         return out
 

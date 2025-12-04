@@ -1,0 +1,29 @@
+1º Comprobar que los espectros que estoy generando coinciden en el espacio con los espectros originales: hacer una representación t-sne. Representar todas las muestras de entrenamiento para ver como se distribuyen verlo por  etiqueta
+2º Hacer lo mismo con los datos generados
+3º Combinando ambas
+
+Nos centramos en un único medio.
+
+Habría q haber cierto solape.
+
+
+Aumentar mas datos aun. Pytorch data augmentation aleatorio 1000-2000 muestras. Dependiende de las clases por si necesita generar mas muestras de una clase que de otra
+
+Random Forest con los datos de entrenamiento originales y otro con los datos generados -> auc que sea parejo promedio
+
+Diseño RF insensible a las variabilidades -> hagamos un árbol de decisión para que mire un rango de valores en vez de pico (mirar la clase de skilearn) lo normal es +-2 bines. Centrado en el máximo de una ventana.
+
+También nos interesa que sea insensible a esa variación de intensidad (en vez de 10 que sea 5 o 6)
+
+Una vez tenemos los árboles definidos, pasamos a hacer un ensembler (RF, adaboost).
+
+--------------------------------------------------------------------------------------------
+2ª Tutoría
+--------------------------------------------------------------------------------------------
+Quitar GU y GUx
+
+Una grafica en la que se vea solo el ribotipo y otro el medio por cada ribotipo -> 1 para cada ribotipo y en cada uno de los ribptipòs el medio que le corresponden
+
+RF -> cual va a ser el conjunto de entrenamiento y el del test -> Como hay 10 muestras por ribotipo utilizo 7 para entrenar y 3 para test
+
+Dar accuaracy 
