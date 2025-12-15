@@ -3,6 +3,7 @@
 ###########################################
 import os
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 from glob import glob
 from sklearn.ensemble import RandomForestClassifier
@@ -33,7 +34,7 @@ training_week   = 'Semana 1'
 n_biomarkers = 10
 
 # Base path for the data (adjust as needed)
-base_path = 'C:/Users/javie/Desktop/TFM/DATA/ClostriRepro/ClostriRepro/Reproducibilidad No extracción'
+base_path = 'C:/Users/javie/Desktop/TFM/TFM/DATA/ClostriRepro/ClostriRepro/Reproducibilidad No extracción'
 
 # DATA AUGMENTATION
 type_augmentation = 'linear'    # Opciones: "random" y "linear"
@@ -42,7 +43,7 @@ seed = 0                        # reprodicibilidad
 
 # T-SNE
 show_tsne_plot = False                                  # True/False -> mostrar figuras
-path_save_tsne = r'C:\Users\javie\Desktop\ImagenesTFM'  # Dirección donde se guardan las figuras del t-sne
+path_save_tsne = r"C:\Users\javie\Desktop\ImagenesTFM"  # Dirección donde se guardan las figuras del t-sne
 tsne_params = dict(                                     # Hiperparámetros
     n_points=4096,
     tic_norm=True,
@@ -299,6 +300,45 @@ print("[RF ORIGINALES + AUMENTADOS]: %.3f" % train_acc_all)
 ###########################################
 # Todos los datos (solo Semana 1)
 ###########################################
+# 1) Cargar las etiquetas por Ribotipo para hacer el split 7/3
+print("Cargando las etiquetas por ribotipo...")
+
+ribo_to_ids = {cl: set() for cl in clases_list}
+
+# Usamos la condición base: No extracción + medio training_media + training_week
+base_ribos_path = base_path  # ya apunta a "Reproducibilidad No extracción"
+
+for clase in clases_list:
+    ruta = f"{base_ribos_path}/{training_media}/{training_week}/{clase}"
+    if not os.path.exists(ruta):
+        print(f"  ⚠️ No existe ruta base para {clase}: {ruta}")
+        continue
+
+    for f in os.listdir(ruta):
+        if f.startswith("."):
+            continue
+        bact_id = f.split("_")[0]   # primera parte -> tipo de bacteria
+        if not bact_id.isdigit():
+            continue
+        ribo_to_ids[clase].add(bact_id)
+
+train_ids_per_ribo = {}
+test_ids_per_ribo  = {}
+
+for ribo, ids_set in ribo_to_ids.items():
+    ids_sorted = sorted(ids_set, key=int)
+    print(f"Ribotipo {ribo}: IDs encontrados en base =", ids_sorted)
+
+    if len(ids_sorted) != 10:
+        print(f"  ⚠️ OJO: ribotipo {ribo} tiene {len(ids_sorted)} bacterias en vez de 10")
+
+    # 7 primeras → TRAIN, 3 últimas → TEST (ajusta si quieres otro orden)
+    train_ids_per_ribo[ribo] = set(ids_sorted[:7])
+    test_ids_per_ribo[ribo]  = set(ids_sorted[7:10])
+
+    print(f"  TRAIN → {sorted(train_ids_per_ribo[ribo], key=int)}")
+    print(f"  TEST  → {sorted(test_ids_per_ribo[ribo],  key=int)}")
+
 # 1) Cargar todos los datos Semana 1
 data_samples = []          # SpectrumObject instances
 data_id_label = []         # IDs
@@ -375,6 +415,104 @@ for extraccion_i in extraccion:
                         continue
     else:
         print("Error al meter la ruta")
+
+print("Una vez cargado los datos, los separaremos en 7/3 para el train/test...")
+###########################################
+# Split 7/3 por ribotipo usando IDs
+###########################################
+data_samples_np = np.array(data_samples, dtype=object)
+data_id_label_np = np.array(data_id_label, dtype=str)
+Y_data_np = np.array(Y_data, dtype=str)
+
+data_split = np.full(len(Y_data_np), "ignore", dtype=object)  # train / test / ignore
+
+ribotipos_unicos = np.unique(Y_data_np)
+
+for ribo in ribotipos_unicos:
+    idx_ribo = np.where(Y_data_np == ribo)[0]
+
+    ids_ribo = data_id_label_np[idx_ribo]
+
+    # nos quedamos solo con IDs numéricos
+    ids_ribo_clean = [bid for bid in ids_ribo if bid.isdigit()]
+    ids_ribo_unique = sorted(set(ids_ribo_clean), key=int)
+
+    if len(ids_ribo_unique) < 10:
+        print(f"⚠️ Ribotipo {ribo}: solo {len(ids_ribo_unique)} IDs únicos (esperaba 10)")
+
+    train_ids_ribo = set(ids_ribo_unique[:7])
+    test_ids_ribo  = set(ids_ribo_unique[-3:])
+
+    for i in idx_ribo:
+        bid = data_id_label_np[i]
+        if not bid.isdigit():
+            continue
+        if bid in train_ids_ribo:
+            data_split[i] = "train"
+        elif bid in test_ids_ribo:
+            data_split[i] = "test"
+
+print("Resumen split:")
+print("  TRAIN:", np.sum(data_split == "train"))
+print("  TEST :", np.sum(data_split == "test"))
+print("  IGNORE:", np.sum(data_split == "ignore"))
+
+inv_label_mapping = {v: k for k, v in label_mapping.items()}
+
+# Máscaras booleanas para train / test
+train_mask = (data_split == "train")
+test_mask  = (data_split == "test")
+
+id_array    = np.array(data_id_label)   # IDs de bacteria (tipo), ej: '7120562'
+label_array = np.array(Y_data)          # ribotipo, ej: 'RT023'
+
+print("\n========== TABLA COMPLETA DE IDS ==========")
+print(f"{'Idx':>4} | {'Tipo':>8} | {'Ribotipo':>8} | {'Split':>6}")
+print("-" * 40)
+
+print("\n========== IDS AGRUPADOS POR RIBOTIPO ==========")
+
+for ribo in np.unique(label_array):
+    idx_ribo = np.where(label_array == ribo)[0]
+
+    ids_ribo = id_array[idx_ribo]
+    train_ribo = ids_ribo[train_mask[idx_ribo]]
+    test_ribo  = ids_ribo[test_mask[idx_ribo]]
+
+    print(f"\nRibotipo {ribo}:")
+    print("  TRAIN →", sorted(set(train_ribo.tolist())))
+    print("  TEST  →", sorted(set(test_ribo.tolist())))
+
+# Construimos la tabla
+rows = []
+
+for i in range(len(data_id_label_np)):
+    id_str = data_id_label_np[i]
+    ribo = Y_data_np[i]
+    split = data_split[i]
+
+    # Extraer tipo de bacteria → el primer número del ID
+    # Ejemplo: "7120562" → tipo = 7
+    tipo_bacteria = id_str[0] if id_str.isdigit() else "?"
+
+    rows.append({
+        "ID": id_str,
+        "Ribotipo": ribo,
+        "Tipo_bacteria": tipo_bacteria,
+        "Split": split,     # train/test/ignore
+    })
+
+df_ids = pd.DataFrame(rows)
+
+# Guardamos como CSV
+output_file = r"C:\Users\javie\Desktop\TFM\TFM\results\ids_split_ribotipos.csv"
+df_ids.to_csv(output_file, index=False)
+
+print("\nArchivo guardado correctamente en:")
+print(output_file)
+print("\nVista previa:")
+print(df_ids.head())
+
 
 # Realizamos el data augmentation sobre TODOS los datos (Semana 1)
 dataAugment = DataAugmentor(seed=seed)
