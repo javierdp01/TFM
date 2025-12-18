@@ -1,14 +1,6 @@
 # TFM
 Trabajo Fin de Máster
 
-# Por hacer:
-- Crear preprocesado data augmentetion -> DONE
-- Adaptar los tipos de los datos -> DONE
-- Añadir los nuevos datos del preprocesado al X_train -> DONE
-- Comprobar que se realiza correctamente el código con RF
-- Adaptarlo para el otro clasificador
-- Comparar los resultados con el modelo sin el data augmentation
-
 # Data Augmentation:
 - Se han generado unos getters y unos setters para obtener y establecer los datos de forma más rápida y sencilla de comprender
 - Se han generado distintas funciones que se encargan de realizar las diferentess operaciones utilizadas durante el aumento de los datos. Estas operaciones son:
@@ -25,4 +17,11 @@ Trabajo Fin de Máster
     * aug_id: son los ids correspondientes a los nuevos datos
     * aug_labels: son las etiquetas correspondientes a los nuevos datos
   
-   Como estos datos no incluyen los obtenidos en la medición, se deberan concatenar los antiguos resultados con los nuevos para así completar el data augmentatino
+   Como estos datos no incluyen los obtenidos en la medición, se deberan concatenar los antiguos resultados con los nuevos para así completar el data augmentation.
+
+- Para comprobar si el data augmentation mantiene la posición original con cierta desviación se utilizó la herramienta t-sne para ver las distancias entre las distintas muestras y una vez comprobado que se mantienen se pasará a cargar todos los datos.
+
+# TODOS LOS DATOS:
+- Se ha partido por cargar los datos de la semana 1 y se ha hecho lo mismo que antes a diferencia de que se ha realizado el t-sne para comprobar las distancias separándolas por ribotipo para así tener una idea más clara de la situación en la que nos encontramos.
+- Tras evaluar la situación, se ha decidido dividir las 10 muestras de cada medio y ribotipo en 2 partes, 7 muestras para realizar el entrenamiento y 3 muestras para realizar la validación. Las muestras del entrenamiento serán las únicas que se aumentarán.
+- Como primer clasificador se ha utilizado un RF en el que se realizará una CrossValidation para evaluar hiperparámetros y así obtener la mejor métrica de precisión posible
