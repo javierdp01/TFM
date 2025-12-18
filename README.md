@@ -13,15 +13,19 @@ Trabajo Fin de Máster
     * spikes: añade picos en posiciones aleatorios para simular descargas, interferencias o contaminación producida por los intrumentos al obtener el espectro de la señal.
 
 - Se ha generado un "main" de la clase encargado de realizar las distintas operaciones ya mencionadas al espectro que se le pasa y devuelve 3 variables:
-    * aug_specs: son los nuevos datos generados con las operaciones
-    * aug_id: son los ids correspondientes a los nuevos datos
-    * aug_labels: son las etiquetas correspondientes a los nuevos datos
+    * aug_specs: son los nuevos datos generados con las operaciones.
+    * aug_id: son los ids correspondientes a los nuevos datos.
+    * aug_labels: son las etiquetas correspondientes a los nuevos datos.
   
    Como estos datos no incluyen los obtenidos en la medición, se deberan concatenar los antiguos resultados con los nuevos para así completar el data augmentation.
-
 - Para comprobar si el data augmentation mantiene la posición original con cierta desviación se utilizó la herramienta t-sne para ver las distancias entre las distintas muestras y una vez comprobado que se mantienen se pasará a cargar todos los datos.
 
-# TODOS LOS DATOS:
-- Se ha partido por cargar los datos de la semana 1 y se ha hecho lo mismo que antes a diferencia de que se ha realizado el t-sne para comprobar las distancias separándolas por ribotipo para así tener una idea más clara de la situación en la que nos encontramos.
-- Tras evaluar la situación, se ha decidido dividir las 10 muestras de cada medio y ribotipo en 2 partes, 7 muestras para realizar el entrenamiento y 3 muestras para realizar la validación. Las muestras del entrenamiento serán las únicas que se aumentarán.
-- Como primer clasificador se ha utilizado un RF en el que se realizará una CrossValidation para evaluar hiperparámetros y así obtener la mejor métrica de precisión posible
+# t-sne
+TODO
+
+# Main
+TODO
+- Se ha partido por cargar los datos de la semana 1 y se ha hecho lo mismo que antes, a diferencia de que se ha realizado el t-sne para comprobar las distancias separándolas por ribotipo para así tener una idea más clara de la situación en la que nos encontramos.
+- Tras evaluar la situación, se ha decidido dividir las 10 muestras de cada medio y ribotipo en 2 partes, 7 muestras para realizar el entrenamiento y 3 muestras para realizar la validación. Las muestras del entrenamiento serán las únicas que se aumentarán. Para lograr esto, se ha tenido en cuenta que todos los medios comparten las mismas 10 bacterias en cada ribotipo, por lo que siempre se cargarán las mismas bacterias para el entrenamiento y la validación.
+- Se ha realizado una comprobación de los nombres en cada medio y ribotipo de las bacterias ya que hay algunas que puedan tener algún error tipográfico, por lo que se mostrará por consola la ubicación de cuando una bacteria se ha ignorado.
+- Como primer clasificador se ha utilizado un RF en el que se realizará una CrossValidation para evaluar hiperparámetros y así obtener la mejor métrica de precisión posible.
