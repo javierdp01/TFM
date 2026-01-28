@@ -18,6 +18,19 @@ from sklearn.preprocessing import label_binarize
 import re
 from excel_dict import export_results_to_excel
 
+from dataloader.preprocess import (
+    SequentialPreprocessor,
+    VarStabilizer,
+    Smoother,
+    BaselineCorrecter,
+    Trimmer,
+    Binner,
+    Normalizer,
+    IntensityThresholding,
+    detect_peaks,
+    Aligner
+)
+
 #-----------------------------------------------------------------------------------------------------------------------------------------------
 ###########################################
 # Opciones
@@ -37,11 +50,11 @@ training_week   = 'Semana 1'
 n_biomarkers = 10
 
 # Base path for the data (adjust as needed)
-base_path = 'C:/Users/javie/Desktop/TFM/TFM/DATA/ClostriRepro/ClostriRepro/Reproducibilidad No extracción'
+base_path = 'C:/Users/javie/Desktop/TFM/DATA/ClostriRepro/ClostriRepro/Reproducibilidad No extracción'
 
 # DATA AUGMENTATION
 type_augmentation = 'linear'    # Opciones: "random" y "linear"
-k_per_spectrum = 20              # nº de espectros aumentados por espectro
+k_per_spectrum = 6               # nº de espectros aumentados por espectro
 seed = 0                        # reprodicibilidad
 
 # T-SNE
@@ -65,23 +78,29 @@ rf_params = dict(
 )
 
 # DATOS GLOBALES
-data_path = 'C:/Users/javie/Desktop/TFM/TFM/DATA/ClostriRepro/ClostriRepro'
+data_path = 'C:/Users/javie/Desktop/TFM/DATA/ClostriRepro/ClostriRepro'
 extraccion = ['Reproducibilidad Extracción', 'Reproducibilidad No extracción']
-medios_extraccion = ['Brx', 'Chx', 'Chx_24h', 'Clx', 'Fax', 'Scx']
+medios_extraccion = ['Brx', 'Chx', 'Clx', 'Scx']
 results_rf_path = 'C:/Users/javie/Desktop/TFM/results'  # Dóonde se guardaran los datos de los resultados
 show_common_grid_plot = False
 
 # Valores Random Forest personalizado
-window = 2   # Valor máximo de la ventana simétrica del decission tree
+window = 2   # Valor de la ventana simétrica del decission tree
 
 param_cv_rf_robusto = {
-        "n_estimators": [50, 100, 200, 400, 800, 1200, 2000, 2500, 3000],
-        "max_depth": [None, 5, 8, 10, 15, 20, 30]
-    }
+    "n_estimators": [400, 800, 1200, 2000, 2500, 3000, 3500, 4000],
+    "max_depth": [5, 8, 10, 15, 20]
+}
 
 scoring_list = ['macro', 'weighted', 'accuracy']
 
+rf_base = RandomForestClassifier(random_state=seed, n_jobs=1)
 
+do_energy_rf = False
+do_occupation_rf = True
+do_peak_rf = False
+delta = 1e-4         # Valor de estabilización
+eps_list = [0.83, 0.84, 0.85, 0.86, 0.87]
 #-----------------------------------------------------------------------------------------------------------------------------------------------
 
 # ###########################################
@@ -939,7 +958,7 @@ n_train_orig = len(train_samples_final) - sum(
 n_train_total = len(train_samples_final)
 
 is_train = np.array([True]*n_train_total + [False]*len(test_samples_final))
-is_test  = ~is_train
+is_test  = is_train
 
 is_aug_train = np.array(
     [False]*n_train_orig + [True]*(n_train_total - n_train_orig)
@@ -1195,122 +1214,111 @@ for sid in train_ids_final:
 groups = np.array(groups, dtype=str)
 
 #-----------------------------------------
-# Modelo Random Forest Robusto
+# Modelo Random Forest Energía
 #-----------------------------------------
-print("\n====================================")
-print("Random Forest Robusto")
-print("====================================")
-
 # 1) Convertir las gráficas de los espectros en funciones discretas formadas por bins
 mz = grid_class
 mz_min = mz.min()
 mz_max = mz.max()
-index_acc = 0
-dict_results = {}
-max_value_execution = -1
-n_bins_max_value = -1
 i_bins = X_train.shape[1]
+bin_edges = np.linspace(mz_min, mz_max, i_bins + 1)
+bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
+
+n_train = X_train.shape[0]
+X_train_binned = np.zeros((n_train, i_bins), dtype=np.float32)
+
+for i in range(n_train):
+    spec = X_train[i]
+
+    for b in range(i_bins):
+        mask = (mz >= bin_edges[b]) & (mz < bin_edges[b + 1])
+        if np.any(mask):
+            X_train_binned[i, b] = spec[mask].sum()
 
 
-for scoring_type in range(0, 1):
-    bin_edges = np.linspace(mz_min, mz_max, i_bins + 1)
-    bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
+X_train_binned_norm = X_train_binned / X_train_binned.sum(axis=1, keepdims=True)
 
-    n_train = X_train.shape[0]
-    X_train_binned = np.zeros((n_train, i_bins), dtype=np.float32)
+print("TRAIN:")
+print("Shape binned:", X_train_binned_norm.shape)
+print("Suma del primer espectro:", X_train_binned_norm[0].sum())
 
-    for i in range(n_train):
-        spec = X_train[i]
+n_test = X_test.shape[0]
+X_test_binned = np.zeros((n_test, i_bins), dtype=np.float32)
 
-        for b in range(i_bins):
-            mask = (mz >= bin_edges[b]) & (mz < bin_edges[b + 1])
-            if np.any(mask):
-                X_train_binned[i, b] = spec[mask].sum()
+for i in range(n_test):
+    spec = X_test[i]
 
-
-    X_train_binned_norm = X_train_binned / X_train_binned.sum(axis=1, keepdims=True)
-
-    print("TRAIN:")
-    print("Shape binned:", X_train_binned_norm.shape)
-    print("Suma del primer espectro:", X_train_binned_norm[0].sum())
-
-    n_test = X_test.shape[0]
-    X_test_binned = np.zeros((n_test, i_bins), dtype=np.float32)
-
-    for i in range(n_test):
-        spec = X_test[i]
-
-        for b in range(i_bins):
-            mask = (mz >= bin_edges[b]) & (mz < bin_edges[b + 1])
-            if np.any(mask):
-                X_test_binned[i, b] = spec[mask].sum()
+    for b in range(i_bins):
+        mask = (mz >= bin_edges[b]) & (mz < bin_edges[b + 1])
+        if np.any(mask):
+            X_test_binned[i, b] = spec[mask].sum()
 
 
-    X_test_binned_norm = X_test_binned / X_test_binned.sum(axis=1, keepdims=True)
+X_test_binned_norm = X_test_binned / X_test_binned.sum(axis=1, keepdims=True)
 
-    print("\nTEST:")
-    print("Shape binned:", X_test_binned_norm.shape)
-    print("Suma del primer espectro:", X_test_binned_norm[0].sum())
+print("\nTEST:")
+print("Shape binned:", X_test_binned_norm.shape)
+print("Suma del primer espectro:", X_test_binned_norm[0].sum())
 
-    if np.isnan(X_train_binned_norm).any():
-        print("WARNING: NaNs en X_train_binned_norm (posible suma 0 en algún espectro)")
-    if np.isnan(X_test_binned_norm).any():
-        print("WARNING: NaNs en X_test_binned_norm (posible suma 0 en algún espectro)")
+if np.isnan(X_train_binned_norm).any():
+    print("WARNING: NaNs en X_train_binned_norm (posible suma 0 en algún espectro)")
+if np.isnan(X_test_binned_norm).any():
+    print("WARNING: NaNs en X_test_binned_norm (posible suma 0 en algún espectro)")
 
-    # 2) Calculamos la energía de cada bin
-    # Train
-    print("\nCalculando la energía de cada train bin con ventana =", window)
-    energy_bin_train = np.zeros((X_train_binned_norm.shape[0], X_train_binned_norm.shape[1]))
-    for i in range(X_train_binned_norm.shape[0]):
-        for j in range(X_train_binned_norm.shape[1]):
-            energy_bin_train[i, j] = X_train_binned_norm[i, j]
-            for w in range(1, window + 1):
-                next_idx = j + w
-                previus_idx = j - w
-                if previus_idx < 0:
-                    energy_bin_train[i, j] += X_train_binned_norm[i, next_idx]
-                elif next_idx >= X_train_binned_norm.shape[1]:
-                    energy_bin_train[i, j] += X_train_binned_norm[i, previus_idx]
-                else:
-                    energy_bin_train[i, j] += X_train_binned_norm[i, next_idx] + X_train_binned_norm[i, previus_idx]
+# 2) Calculamos la energía de cada bin
+# Train
+print("\nCalculando la energía de cada train bin con ventana =", window)
+energy_bin_train = np.zeros((X_train_binned_norm.shape[0], X_train_binned_norm.shape[1]))
+for i in range(X_train_binned_norm.shape[0]):
+    for j in range(X_train_binned_norm.shape[1]):
+        energy_bin_train[i, j] = X_train_binned_norm[i, j]
+        for w in range(1, window + 1):
+            next_idx = j + w
+            previus_idx = j - w
+            if previus_idx < 0:
+                energy_bin_train[i, j] += X_train_binned_norm[i, next_idx]
+            elif next_idx >= X_train_binned_norm.shape[1]:
+                energy_bin_train[i, j] += X_train_binned_norm[i, previus_idx]
+            else:
+                energy_bin_train[i, j] += X_train_binned_norm[i, next_idx] + X_train_binned_norm[i, previus_idx]
 
-    # Test
-    print("Calculando la energía de cada test bin con ventana =", window)
-    energy_bin_test= np.zeros((X_test_binned_norm.shape[0], X_test_binned_norm.shape[1]))
-    for i in range(X_test_binned_norm.shape[0]):
-        for j in range(X_test_binned_norm.shape[1]):
-            energy_bin_test[i, j] = X_test_binned_norm[i, j]
-            for w in range(1, window + 1):
-                next_idx = j + w
-                previus_idx = j - w
-                if previus_idx < 0:
-                    energy_bin_test[i, j] += X_test_binned_norm[i, next_idx]
-                elif next_idx >= X_test_binned_norm.shape[1]:
-                    energy_bin_test[i, j] += X_test_binned_norm[i, previus_idx]
-                else:
-                    energy_bin_test[i, j] += X_test_binned_norm[i, next_idx] + X_test_binned_norm[i, previus_idx]
+# Test
+print("Calculando la energía de cada test bin con ventana =", window)
+energy_bin_test= np.zeros((X_test_binned_norm.shape[0], X_test_binned_norm.shape[1]))
+for i in range(X_test_binned_norm.shape[0]):
+    for j in range(X_test_binned_norm.shape[1]):
+        energy_bin_test[i, j] = X_test_binned_norm[i, j]
+        for w in range(1, window + 1):
+            next_idx = j + w
+            previus_idx = j - w
+            if previus_idx < 0:
+                energy_bin_test[i, j] += X_test_binned_norm[i, next_idx]
+            elif next_idx >= X_test_binned_norm.shape[1]:
+                energy_bin_test[i, j] += X_test_binned_norm[i, previus_idx]
+            else:
+                energy_bin_test[i, j] += X_test_binned_norm[i, next_idx] + X_test_binned_norm[i, previus_idx]
 
-    if np.isnan(energy_bin_train).any():
-        print("WARNING: NaNs en energy_bin_train (posible suma 0 en algún espectro)")
-    if np.isnan(energy_bin_test).any():
-        print("WARNING: NaNs en energy_bin_test (posible suma 0 en algún espectro)")
+if np.isnan(energy_bin_train).any():
+    print("WARNING: NaNs en energy_bin_train (posible suma 0 en algún espectro)")
+if np.isnan(energy_bin_test).any():
+    print("WARNING: NaNs en energy_bin_test (posible suma 0 en algún espectro)")
 
+if do_energy_rf:
+    print("\n====================================")
+    print("Random Forest Energía")
+    print("====================================")
     # 3) Buscamos los mejores hiperparámetros con GridSearchCV y generamos el modelo del Random Forest Robusto
     n_classes = len(CLASSES)
-    rf_base = RandomForestClassifier(random_state=seed, n_jobs=1)
 
     auc_scorer = make_scorer(
         roc_auc_score,
         response_method="predict_proba",
         multi_class="ovr",
-        average=scoring_list[scoring_type],
+        average='macro',
         labels=np.arange(n_classes)  # fuerza el orden de clases
     )
 
     cv = GroupKFold(n_splits=2)
-
-    if scoring_list[scoring_type] == 'accuracy':
-        auc_scorer = 'balanced_accuracy'
 
     grid = GridSearchCV(
         estimator=rf_base,
@@ -1359,8 +1367,6 @@ for scoring_type in range(0, 1):
     balanced_acc_test_global_rf_robusto = balanced_accuracy_score(y_test, y_test_pred)
     print(f"\nValor del balanced accuracy: {balanced_acc_test_global_rf_robusto:.4f}")
     print(f"Valor del ROC AUC score: {roc_auc_score_test_robusto:.4f}")
-
-print(f"\nValor máximo del accuracy de la ejecución: {max_value_execution:.4f} con {n_bins_max_value} bins")
 
 # =========================================
 # AUC (ROC) en TEST para multiclase (OvR)
@@ -1526,11 +1532,125 @@ print(f"\nValor máximo del accuracy de la ejecución: {max_value_execution:.4f}
 
 # exit()
 
-###########################################
-# Modelo Random Forest
-###########################################
+#-----------------------------------------
+# Modelo Random Forest Ocupación
+#-----------------------------------------
+best_acc = -1
+best_eps = -1
+if do_occupation_rf:
+    print("\n====================================")
+    print("Random Forest Ocupación")
+    print("====================================")
+    cv_outer = GroupKFold(n_splits=2)
+
+    for eps in eps_list:
+        # epsilon por muestra (un valor por fila)
+        eps_vec = np.quantile(X_train_binned_norm, eps, axis=1)  # shape (n_train,)
+        X_train_occ = (X_train_binned_norm > eps_vec[:, None])
+
+        rf = RandomForestClassifier(random_state=0, n_jobs=-1)
+
+        n_classes = len(CLASSES)
+
+        auc_scorer = make_scorer(
+        roc_auc_score,
+        response_method="predict_proba",
+        multi_class="ovr",
+        average='macro',
+        labels=np.arange(n_classes)  # fuerza el orden de clases
+        )
+
+        grid = GridSearchCV(
+            estimator=rf,
+            param_grid=param_cv_rf_robusto,
+            scoring=auc_scorer,
+            cv=cv_outer,
+            n_jobs=-1,
+            verbose=0
+        )
+
+        grid.fit(X_train_occ, y_train, groups=groups)
+        mean_cv = grid.best_score_
+
+        print(f"eps={eps:.2f} | best_CV={mean_cv:.4f} | best_params={grid.best_params_}")
+
+        eps_test = np.quantile(X_test_binned_norm, eps, axis=1)
+        X_test_occ = (X_test_binned_norm > eps_test[:, None])
+
+        best_rf = grid.best_estimator_
+
+        y_pred = best_rf.predict(X_test_occ)
+        balanced_acc_test_global_rf_occupation = balanced_accuracy_score(y_test, y_pred)
+       
+        if balanced_acc_test_global_rf_occupation > best_acc:
+            best_eps = eps
+            best_acc = balanced_acc_test_global_rf_occupation
+            y_test_proba = best_rf.predict_proba(X_test_occ)
+            y_test_bin = label_binarize(y_test, classes=np.arange(n_classes))
+            roc_auc_score_test_occupation = roc_auc_score(y_test_bin, y_test_proba, multi_class="ovr", average="macro")
+            train_acc_occupation = grid.best_score_
+
+print(f"Mejor valor de eps: {best_eps}")
+print(f"Balanced Accuracy TEST: {balanced_acc_test_global_rf_occupation:.4f}")
+print(f"Valor del ROC AUC score: {roc_auc_score_test_occupation:.4f}")
+
+#-----------------------------------------
+# Modelo Random Forest Peak
+#-----------------------------------------
+if do_peak_rf:
+    print("\n====================================")
+    print("Random Forest Peak")
+    print("====================================")
+
+    eps_vec = np.quantile(X_train_binned_norm, eps, axis=1)
+    X_occ_train = (X_train_binned_norm > eps_vec[:, None])
+    X_occ_test = (X_test_binned_norm > eps_test[:, None])
+
+    X_peak_train = energy_bin_train / (X_occ_train + delta)
+    X_peak_test = energy_bin_test / (X_occ_test + delta)
+
+    n_classes = len(CLASSES)
+
+    auc_scorer = make_scorer(
+        roc_auc_score,
+        response_method="predict_proba",
+        multi_class="ovr",
+        average='macro',
+        labels=np.arange(n_classes)  # fuerza el orden de clases
+    )
+
+    cv = GroupKFold(n_splits=2)
+
+    grid = GridSearchCV(
+        estimator=rf_base,
+        param_grid=param_cv_rf_robusto,
+        scoring=auc_scorer,
+        cv=cv,
+        n_jobs=-1,
+        verbose=2,
+        error_score=np.nan,  # para que no reviente si algún fold no permite AUC
+        refit=True
+    )
+
+    grid.fit(X_peak_train, y_train, groups=groups)
+    print("Mejor score CV:", grid.best_score_)
+    print("Mejores hiperparámetros:", grid.best_params_)
+    best_rf = grid.best_estimator_
+
+    y_pred = best_rf.predict(X_peak_test)
+    y_test_proba = best_rf.predict_proba(X_peak_test)
+    balanced_acc_test_global_rf_peak = balanced_accuracy_score(y_test, y_pred)
+    print(f"Balanced Accuracy TEST: {balanced_acc_test_global_rf_peak:.4f}")
+    y_test_bin = label_binarize(y_test, classes=np.arange(n_classes))
+    roc_auc_score_test_peak = roc_auc_score(y_test_bin, y_test_proba, multi_class="ovr", average="macro")
+    print(f"Valor del ROC AUC score: {roc_auc_score_test_peak:.4f}")
+
+
+#-----------------------------------------
+# Modelo Random Forest Standard
+#-----------------------------------------
 print("\n====================================")
-print("Random Forest Genérico")
+print("Random Forest Standard")
 print("====================================")
 
 # -----------------------------------------
@@ -1595,6 +1715,22 @@ print("====================================")
 
 print("\nResumen de resultados Random Forest Robusto vs Random Forest Genérico:")
 print(f"Valores utilizados: aumentos por datos: {k_per_spectrum}, tamaño de la ventana: {window}, nº de bins: {i_bins}")
-print(f"Valor del RF robusto en acc: {balanced_acc_test_global_rf_robusto:.4f} vs valor del RF genérico en acc: {acc_global:.4f}")
-print(f"Valor del RF robusto en ROC AUC score: {roc_auc_score_test_robusto:.4f} vs valor del RF genérico en ROC AUC score: {roc_auc_score_test_generico:.4f}")
-print("Código ejecutado sin errores...")
+
+if do_energy_rf:
+    print(f"\nRF ENERGÍA: balanced acc: {balanced_acc_test_global_rf_robusto:.4f}. ROC AUC score: {roc_auc_score_test_robusto:.4f}")
+
+if do_occupation_rf:
+    print("\nRF OCCUPATION:")
+    print(f"TEST: balanced acc: {balanced_acc_test_global_rf_occupation:.4f}. ROC AUC score: {roc_auc_score_test_occupation:.4f}")
+    print(f"TRAIN: {train_acc_occupation}")
+
+if do_peak_rf:
+    print(f"\nRF PEAK: balanced acc: {balanced_acc_test_global_rf_peak:.4f}. ROC AUC score: {roc_auc_score_test_peak:.4f}")
+
+print(f"\nRF STANDARD:")
+print(f"TEST: balanced acc: {acc_global:.4f}. ROC AUC score: {roc_auc_score_test_generico:.4f}")
+
+print("\nCódigo ejecutado sin errores...")
+
+# baseline_samples = [preprocess_pipeline(s) for s in tqdm(baseline_samples, desc="Baseline samples")]
+# X_train = [s.intensity for i, s in enumerate(baseline_samples)]
